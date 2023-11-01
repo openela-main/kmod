@@ -1,0 +1,62 @@
+From a06bacf500d56b72b5f9b121ebf7f6af9e3df185 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Mon, 17 Dec 2018 23:46:28 +0100
+Subject: [PATCH 2/2] depmod: prevent module dependency files corruption due to
+ parallel invocation.
+
+Depmod does not use unique filename for temporary files. There is no
+guarantee the user does not attempt to run mutiple depmod processes in
+parallel. If that happens a temporary file might be created by
+depmod(1st), truncated by depmod(2nd), and renamed to final name by
+depmod(1st) resulting in corrupted file seen by user.
+
+Due to missing mkstempat() this is more complex than it should be.
+Adding PID and timestamp to the filename should be reasonably reliable.
+Adding O_EXCL as mkstemp does fails creating the file rather than
+corrupting existing file.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+---
+ tools/depmod.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/tools/depmod.c b/tools/depmod.c
+index 18c0d61b2db3..0f7e33ccfd59 100644
+--- a/tools/depmod.c
++++ b/tools/depmod.c
+@@ -29,6 +29,7 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
++#include <sys/time.h>
+ #include <sys/utsname.h>
+ 
+ #include <shared/array.h>
+@@ -2398,6 +2399,9 @@ static int depmod_output(struct depmod *depmod, FILE *out)
+ 	};
+ 	const char *dname = depmod->cfg->dirname;
+ 	int dfd, err = 0;
++	struct timeval tv;
++
++	gettimeofday(&tv, NULL);
+ 
+ 	if (out != NULL)
+ 		dfd = -1;
+@@ -2416,11 +2420,12 @@ static int depmod_output(struct depmod *depmod, FILE *out)
+ 		int r, ferr;
+ 
+ 		if (fp == NULL) {
+-			int flags = O_CREAT | O_TRUNC | O_WRONLY;
++			int flags = O_CREAT | O_EXCL | O_WRONLY;
+ 			int mode = 0644;
+ 			int fd;
+ 
+-			snprintf(tmp, sizeof(tmp), "%s.tmp", itr->name);
++			snprintf(tmp, sizeof(tmp), "%s.%i.%li.%li", itr->name, getpid(),
++					tv.tv_usec, tv.tv_sec);
+ 			fd = openat(dfd, tmp, flags, mode);
+ 			if (fd < 0) {
+ 				ERR("openat(%s, %s, %o, %o): %m\n",
+-- 
+2.33.0
+
