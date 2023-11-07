@@ -1,0 +1,58 @@
+From 06fadcc6b17c3b9a534540dd6d74b0c5fb1d948d Mon Sep 17 00:00:00 2001
+From: Yauheni Kaliuta <ykaliuta@redhat.com>
+Date: Thu, 2 Feb 2023 15:47:36 +0200
+Subject: [PATCH] man/rmmod: explain why modprobe -r is more useful
+
+Improve user experience by explaining the option so the user may
+not search explanations in other manpages (modprobe).
+
+Signed-off-by: Yauheni Kaliuta <ykaliuta@redhat.com>
+Reviewed-by: Luis Chamberlain <mcgrof@kernel.org>
+Signed-off-by: Lucas De Marchi <lucas.de.marchi@gmail.com>
+---
+ man/rmmod.xml | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/man/rmmod.xml b/man/rmmod.xml
+index e7c7e5f9e7dc..67bcbedd972b 100644
+--- a/man/rmmod.xml
++++ b/man/rmmod.xml
+@@ -52,7 +52,8 @@
+       want to use
+       <citerefentry>
+         <refentrytitle>modprobe</refentrytitle><manvolnum>8</manvolnum>
+-      </citerefentry> with the <option>-r</option> option instead.
++      </citerefentry> with the <option>-r</option> option instead
++      since it removes unused dependent modules as well.
+     </para>
+   </refsect1>
+ 
+--- a/man/rmmod.8	2020-12-28 02:58:30.085851136 +0200
++++ b/man/rmmod.8	2023-02-09 16:55:55.967128297 +0200
+@@ -2,12 +2,12 @@
+ .\"     Title: rmmod
+ .\"    Author: Jon Masters <jcm@jonmasters.org>
+ .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+-.\"      Date: 12/27/2020
++.\"      Date: 02/09/2023
+ .\"    Manual: rmmod
+ .\"    Source: kmod
+ .\"  Language: English
+ .\"
+-.TH "RMMOD" "8" "12/27/2020" "kmod" "rmmod"
++.TH "RMMOD" "8" "02/09/2023" "kmod" "rmmod"
+ .\" -----------------------------------------------------------------
+ .\" * Define some portability stuff
+ .\" -----------------------------------------------------------------
+@@ -39,7 +39,7 @@
+ \fBmodprobe\fR(8)
+ with the
+ \fB\-r\fR
+-option instead\&.
++option instead since it removes unused dependent modules as well\&.
+ .SH "OPTIONS"
+ .PP
+ \fB\-v\fR, \fB\-\-verbose\fR
+-- 
+2.39.1
+
