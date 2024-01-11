@@ -520,26 +520,31 @@ finish_sandbox() {
 # Auxiliary functions to find symvers file
 make_kernel_file_names() {
     local krel="$1"
-    local file="$2"
-    local suffix="$3"
+    shift
+    local file="$1"
+    shift
 
-    echo "${BASEDIR}/boot/${file}-${krel}${suffix}"
-    echo "${BASEDIR}/lib/modules/${krel}/${file}${suffix}"
+    for suffix in "$@"; do
+        echo "${BASEDIR}/boot/${file}-${krel}${suffix}"
+        echo "${BASEDIR}/lib/modules/${krel}/${file}${suffix}"
+    done
 }
 
 find_kernel_file() {
     local krel="$1"
-    local file="$2"
-    local suffix="$3"
-    local print="$4"
+    shift
+    local file="$1"
+    shift
+    local print="$1"
+    shift
     local i
 
     if [[ "$print" != "" ]]; then
-        make_kernel_file_names "$krel" "$file" "$suffix"
+        make_kernel_file_names "$krel" "$file" "$@"
         return 0
     fi
 
-    for i in  $(make_kernel_file_names "$krel" "$file" "$suffix"); do
+    for i in  $(make_kernel_file_names "$krel" "$file" "$@"); do
         if [[ -r "$i" ]]; then
             echo "$i"
             return 0
@@ -563,7 +568,7 @@ find_symvers_file() {
     local krel="$1"
     local print="$2"
 
-    find_kernel_file "$krel" symvers .gz "$print"
+    find_kernel_file "$krel" symvers "$print" .xz .gz
 }
 
 # find_systemmap_file:
@@ -573,7 +578,7 @@ find_systemmap_file() {
     local print="$2"
     local no_suffix=""
 
-    find_kernel_file "$krel" System.map "$no_suffix" "$print"
+    find_kernel_file "$krel" System.map "$print" "$no_suffix"
 }
 
 #### Main logic

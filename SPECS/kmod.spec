@@ -1,6 +1,6 @@
 Name:		kmod
 Version:	28
-Release:	7%{?dist}
+Release:	9%{?dist}
 Summary:	Linux kernel module management utilities
 
 License:	GPLv2+
@@ -9,6 +9,8 @@ Source0:	https://www.kernel.org/pub/linux/utils/kernel/kmod/%{name}-%{version}.t
 Source1:	weak-modules
 Source2:	depmod.conf.dist
 Exclusiveos:	Linux
+
+Patch01:	man-rmmod-explain-why-modprobe-r-is-more-useful.patch
 
 BuildRequires:  gcc
 BuildRequires:	chrpath
@@ -109,6 +111,14 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Thu May 11 2023 Eugene Syromiatnikov <esyr@redhat.com> - 28-9
+- Add symvers.xz support to weak-modules
+- Resolves: rhbz#2192895
+
+* Thu Feb  9 2023 Yauheni Kaliuta <ykaliuta@redhat.com> - 28-8
+- man/rmmod: explain why modprobe -r is more useful
+  Resolves: rhbz#2164253
+
 * Thu Oct 21 2021 Yauheni Kaliuta <ykaliuta@redhat.com> - 28-7
 - Add RHEL gating configuration. Related: rhbz#1985100
 
