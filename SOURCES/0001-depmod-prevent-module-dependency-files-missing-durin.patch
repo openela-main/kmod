@@ -1,0 +1,33 @@
+From c2996b5fa880e81f63c25e80a4157b2239e32c5d Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Mon, 10 Dec 2018 22:29:32 +0100
+Subject: [PATCH 1/2] depmod: prevent module dependency files missing during
+ depmod invocation
+
+depmod deletes the module dependency files before moving the temporary
+files in their place. This results in user seeing no dependency files
+while they are updated. Remove the unlink call. The rename call should
+suffice to move the new file in place and unlink the old one. It should
+also do both atomically so there is no window when no dependency file
+exists.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+---
+ tools/depmod.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tools/depmod.c b/tools/depmod.c
+index 989d9077926c..18c0d61b2db3 100644
+--- a/tools/depmod.c
++++ b/tools/depmod.c
+@@ -2451,7 +2451,6 @@ static int depmod_output(struct depmod *depmod, FILE *out)
+ 			break;
+ 		}
+ 
+-		unlinkat(dfd, itr->name, 0);
+ 		if (renameat(dfd, tmp, dfd, itr->name) != 0) {
+ 			err = -errno;
+ 			CRIT("renameat(%s, %s, %s, %s): %m\n",
+-- 
+2.33.0
+
