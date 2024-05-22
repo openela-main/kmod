@@ -1,6 +1,6 @@
 Name:		kmod
 Version:	25
-Release:	19%{?dist}
+Release:	20%{?dist}
 Summary:	Linux kernel module management utilities
 
 Group:		System Environment/Kernel
@@ -129,6 +129,10 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Wed Oct 11 2023 Eugene Syromiatnikov <esyr@redhat.com> - 25-20
+- Add symvers.xz support to weak-modules
+- Resolves: RHEL-8903
+
 * Mon Nov 29 2021 Yauheni Kaliuta <ykaliuta@redhat.com> - 25-19
 - depmod: fix parallel execution issues
   Resolves: rhbz#2026938
