@@ -1,0 +1,38 @@
+From d5950b0b5e66a5ec1c21b638dec3974056aaabeb Mon Sep 17 00:00:00 2001
+From: Mikhail Novosyolov <m.novosyolov@rosalinux.ru>
+Date: Sun, 25 Sep 2022 17:46:08 +0300
+Subject: [PATCH] libkmod: do not crash on unknown signature algorithm
+
+Example kernel module:
+https://file-store.rosalinux.ru/download/7281f97e0c04c0f818ad3f936706f4a407e8dc7e
+(/lib/modules/5.15.67-generic-1rosa2021.1-x86_64/kernel/drivers/usb/host/xhci-pci.ko.zst)
+It is signed with Streebog 512.
+
+libkmod v30 crashed in libkmod-module.c:2413 in this code:
+
+n = kmod_module_info_append(list,
+	"sig_hashalgo", strlen("sig_hashalgo"),
+	sig_info.hash_algo, strlen(sig_info.hash_algo));
+
+because strlen() got null.
+---
+ libkmod/libkmod-signature.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libkmod/libkmod-signature.c b/libkmod/libkmod-signature.c
+index 4ae5af6..092f396 100644
+--- a/libkmod/libkmod-signature.c
++++ b/libkmod/libkmod-signature.c
+@@ -278,6 +278,9 @@ static bool fill_pkcs7(const char *mem, off_t size,
+ 	X509_ALGOR_get0(&o, NULL, NULL, dig_alg);
+ 
+ 	sig_info->hash_algo = pkey_hash_algo[obj_to_hash_algo(o)];
++	// hash algo has not been recognized
++	if (sig_info->hash_algo == NULL)
++		goto err3;
+ 	sig_info->id_type = pkey_id_type[modsig->id_type];
+ 
+ 	pvt = malloc(sizeof(*pvt));
+-- 
+2.13.6
+

@@ -1,6 +1,6 @@
 Name:		kmod
 Version:	28
-Release:	9%{?dist}
+Release:	10%{?dist}
 Summary:	Linux kernel module management utilities
 
 License:	GPLv2+
@@ -11,6 +11,14 @@ Source2:	depmod.conf.dist
 Exclusiveos:	Linux
 
 Patch01:	man-rmmod-explain-why-modprobe-r-is-more-useful.patch
+# v29~5 "libkmod: fix an overflow with wrong modules.builtin.modinfo"
+Patch02:	0001-libkmod-fix-an-overflow-with-wrong-modules.builtin.m.patch
+# v31~29 "libkmod: do not crash on unknown signature algorithm"
+Patch03:	0001-libkmod-do-not-crash-on-unknown-signature-algorithm.patch
+# v31~18 "libkmod: error out on unknown hash algorithm"
+Patch04:	0001-libkmod-error-out-on-unknown-hash-algorithm.patch
+# v33~1 "libkmod: avoid undefined behaviour in libkmod-builtin.c:get_string"
+Patch05:	0001-libkmod-avoid-undefined-behaviour-in-libkmod-builtin.patch
 
 BuildRequires:  gcc
 BuildRequires:	chrpath
@@ -111,6 +119,10 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Thu Aug 15 2024 Eugene Syromiatnikov <esyr@redhat.com> - 28-10
+- Fix issues discovered by static analysis
+- Resolves: RHEL-34073
+
 * Thu May 11 2023 Eugene Syromiatnikov <esyr@redhat.com> - 28-9
 - Add symvers.xz support to weak-modules
 - Resolves: rhbz#2192895

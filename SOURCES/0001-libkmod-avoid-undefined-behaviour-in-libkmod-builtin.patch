@@ -1,0 +1,44 @@
+From 5c22362b6b97af9c6b7587f0c3450001e9893115 Mon Sep 17 00:00:00 2001
+From: Eugene Syromiatnikov <esyr@redhat.com>
+Date: Tue, 13 Aug 2024 16:17:27 +0200
+Subject: [PATCH] libkmod: avoid undefined behaviour in
+ libkmod-builtin.c:get_string
+
+Static analysis has reported a potential UB:
+
+    kmod-31/libkmod/libkmod-builtin.c:125: use_invalid: Using "nullp", which points to an out-of-scope variable "buf".
+    #  123|   	size_t linesz = 0;
+    #  124|
+    #  125|-> 	while (!nullp) {
+    #  126|   		char buf[BUFSIZ];
+    #  127|   		ssize_t sz;
+
+It seems to be indeed an UB, as nullp is getting assined an address
+inside object buf, which has a lifetime of the while loop body,
+and is not available outside of it (specifically, in the while
+condition, where nullp is checked for NULL).  Fix it by putting
+buf definition in the outer block.
+---
+ libkmod/libkmod-builtin.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libkmod/libkmod-builtin.c b/libkmod/libkmod-builtin.c
+index fd0f549..40a7d61 100644
+--- a/libkmod/libkmod-builtin.c
++++ b/libkmod/libkmod-builtin.c
+@@ -105,11 +105,11 @@ static off_t get_string(struct kmod_builtin_iter *iter, off_t offset,
+ 			char **line, size_t *size)
+ {
+ 	int sv_errno;
++	char buf[BUFSIZ];
+ 	char *nullp = NULL;
+ 	size_t linesz = 0;
+ 
+ 	while (!nullp) {
+-		char buf[BUFSIZ];
+ 		ssize_t sz;
+ 		size_t partsz;
+ 
+-- 
+2.13.6
+
