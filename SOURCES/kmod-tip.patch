@@ -1,0 +1,561 @@
+From 1bb23d7f19d888fbdd96ae0fe929b7086713ef33 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Tue, 18 Jul 2023 14:01:52 +0200
+Subject: [PATCH 1/6] configure: Detect openssl sm3 support
+
+Older openssl versions do not support sm3. The code has an option to
+disable the sm3 hash but the lack of openssl support is not detected
+automatically.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Link: https://lore.kernel.org/r/b97e20faa07e9e31c6eaf96683011aa24e80760c.1689681454.git.msuchanek@suse.de
+Signed-off-by: Lucas De Marchi <lucas.de.marchi@gmail.com>
+---
+ configure.ac | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 82a8532..e5bceea 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -123,6 +123,13 @@ AC_ARG_WITH([openssl],
+ AS_IF([test "x$with_openssl" != "xno"], [
+ 	PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.1.0], [LIBS="$LIBS $libcrypto_LIBS"])
+ 	AC_DEFINE([ENABLE_OPENSSL], [1], [Enable openssl for modinfo.])
++	AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <openssl/ssl.h>
++		int nid = NID_sm3;]])], [
++		AC_MSG_NOTICE([openssl supports sm3])
++	], [
++		AC_MSG_NOTICE([openssl sm3 support not detected])
++		CPPFLAGS="$CPPFLAGS -DOPENSSL_NO_SM3"
++	])
+ ], [
+ 	AC_MSG_NOTICE([openssl support not requested])
+ ])
+-- 
+2.41.0
+
+
+From 4e7effbdc00307d0d1e83115e0d00cc75aae5cc6 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Tue, 18 Jul 2023 14:01:53 +0200
+Subject: [PATCH 2/6] man/depmod.d: Fix incorrect /usr/lib search path
+
+depmod searches /lib/depmod.d but the man page says /usr/lib/depmod.d is
+searched. Align the documentation with the code.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Link: https://lore.kernel.org/r/9c5a6356b1a111eb6e17ddb110494b7f1d1b44c0.1689681454.git.msuchanek@suse.de
+Signed-off-by: Lucas De Marchi <lucas.de.marchi@gmail.com>
+---
+ man/depmod.d.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/depmod.d.xml b/man/depmod.d.xml
+index 76548e9..8d3d821 100644
+--- a/man/depmod.d.xml
++++ b/man/depmod.d.xml
+@@ -39,7 +39,7 @@
+   </refnamediv>
+ 
+   <refsynopsisdiv>
+-    <para><filename>/usr/lib/depmod.d/*.conf</filename></para>
++    <para><filename>/lib/depmod.d/*.conf</filename></para>
+     <para><filename>/usr/local/lib/depmod.d/*.conf</filename></para>
+     <para><filename>/run/depmod.d/*.conf</filename></para>
+     <para><filename>/etc/depmod.d/*.conf</filename></para>
+-- 
+2.41.0
+
+
+From 8463809f8a29b254b2cab2ce755641bc690f07c9 Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Tue, 18 Jul 2023 14:01:54 +0200
+Subject: [PATCH 3/6] libkmod, depmod: Load modprobe.d, depmod.d from
+ ${prefix}/lib.
+
+There is an ongoing effort to limit use of files outside of /usr (or
+${prefix} on general). Currently all modprobe.d paths are hardcoded to
+outside of $prefix. Teach kmod to load modprobe.d from ${prefix}/lib.
+
+On some distributions /usr/lib and /lib are the same directory because
+of a compatibility symlink, and it is possible to craft configuration
+files with sideeffects that would behave differently when loaded twice.
+However, the override semantic ensures that one 'overrides' the other,
+and only one configuration file of the same name is loaded from any of
+the search directories.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Link: https://lore.kernel.org/r/a290343ce32e2a3c25b134e4f27c13b26e06c9e0.1689681454.git.msuchanek@suse.de
+Signed-off-by: Lucas De Marchi <lucas.de.marchi@gmail.com>
+---
+ Makefile.am        | 1 +
+ configure.ac       | 5 +++++
+ libkmod/libkmod.c  | 7 ++++---
+ man/Makefile.am    | 9 +++++++--
+ man/depmod.d.xml   | 1 +
+ man/modprobe.d.xml | 1 +
+ tools/depmod.c     | 1 +
+ 7 files changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 5b7abfe..e6630a3 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -19,6 +19,7 @@ AM_CPPFLAGS = \
+ 	-include $(top_builddir)/config.h \
+ 	-I$(top_srcdir) \
+ 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
++	-DDISTCONFDIR=\""$(distconfdir)"\" \
+ 	${zlib_CFLAGS}
+ 
+ AM_CFLAGS = $(OUR_CFLAGS)
+diff --git a/configure.ac b/configure.ac
+index e5bceea..fd88d1f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -79,6 +79,10 @@ AC_COMPILE_IFELSE(
+ # --with-
+ #####################################################################
+ 
++AC_ARG_WITH([distconfdir], AS_HELP_STRING([--with-distconfdir=DIR], [directory to search for distribution configuration files]),
++        [], [with_distconfdir='${prefix}/lib'])
++AC_SUBST([distconfdir], [$with_distconfdir])
++
+ AC_ARG_WITH([rootlibdir],
+         AS_HELP_STRING([--with-rootlibdir=DIR], [rootfs directory to install shared libraries]),
+         [], [with_rootlibdir=$libdir])
+@@ -313,6 +317,7 @@ AC_MSG_RESULT([
+ 
+ 	prefix:			${prefix}
+ 	sysconfdir:		${sysconfdir}
++	distconfdir:		${distconfdir}
+ 	libdir:			${libdir}
+ 	rootlibdir:		${rootlibdir}
+ 	includedir:		${includedir}
+diff --git a/libkmod/libkmod.c b/libkmod/libkmod.c
+index 1b8773c..57fac1c 100644
+--- a/libkmod/libkmod.c
++++ b/libkmod/libkmod.c
+@@ -65,6 +65,7 @@ static const char *const default_config_paths[] = {
+ 	SYSCONFDIR "/modprobe.d",
+ 	"/run/modprobe.d",
+ 	"/usr/local/lib/modprobe.d",
++	DISTCONFDIR "/modprobe.d",
+ 	"/lib/modprobe.d",
+ 	NULL
+ };
+@@ -272,9 +273,9 @@ static enum kmod_file_compression_type get_kernel_compression(struct kmod_ctx *c
+  *                to load from user-defined configuration parameters such as
+  *                alias, blacklists, commands (install, remove). If NULL
+  *                defaults to /etc/modprobe.d, /run/modprobe.d,
+- *                /usr/local/lib/modprobe.d and /lib/modprobe.d. Give an empty
+- *                vector if configuration should not be read. This array must
+- *                be null terminated.
++ *                /usr/local/lib/modprobe.d, DISTCONFDIR/modprobe.d, and
++ *                /lib/modprobe.d. Give an empty vector if configuration should
++ *                not be read. This array must be null terminated.
+  *
+  * Create kmod library context. This reads the kmod configuration
+  * and fills in the default values.
+diff --git a/man/Makefile.am b/man/Makefile.am
+index 11514d5..2fea8e4 100644
+--- a/man/Makefile.am
++++ b/man/Makefile.am
+@@ -17,9 +17,14 @@ EXTRA_DIST = $(MAN5:%.5=%.xml) $(MAN8:%.8=%.xml)
+ CLEANFILES = $(dist_man_MANS)
+ 
+ %.5 %.8: %.xml
+-	$(AM_V_XSLT)$(XSLT) \
++	$(AM_V_XSLT)if [ '$(distconfdir)' != '/lib' ] ; then \
++		sed -e 's|@DISTCONFDIR@|$(distconfdir)|g' $< ; \
++	else \
++		sed -e '/@DISTCONFDIR@/d' $< ; \
++	fi | \
++	$(XSLT) \
+ 		-o $@ \
+ 		--nonet \
+ 		--stringparam man.output.quietly 1 \
+ 		--param funcsynopsis.style "'ansi'" \
+-		http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
++		http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl -
+diff --git a/man/depmod.d.xml b/man/depmod.d.xml
+index 8d3d821..f282a39 100644
+--- a/man/depmod.d.xml
++++ b/man/depmod.d.xml
+@@ -40,6 +40,7 @@
+ 
+   <refsynopsisdiv>
+     <para><filename>/lib/depmod.d/*.conf</filename></para>
++    <para><filename>@DISTCONFDIR@/depmod.d/*.conf</filename></para>
+     <para><filename>/usr/local/lib/depmod.d/*.conf</filename></para>
+     <para><filename>/run/depmod.d/*.conf</filename></para>
+     <para><filename>/etc/depmod.d/*.conf</filename></para>
+diff --git a/man/modprobe.d.xml b/man/modprobe.d.xml
+index 0ab3e91..2bf6537 100644
+--- a/man/modprobe.d.xml
++++ b/man/modprobe.d.xml
+@@ -41,6 +41,7 @@
+ 
+   <refsynopsisdiv>
+     <para><filename>/lib/modprobe.d/*.conf</filename></para>
++    <para><filename>@DISTCONFDIR@/modprobe.d/*.conf</filename></para>
+     <para><filename>/usr/local/lib/modprobe.d/*.conf</filename></para>
+     <para><filename>/run/modprobe.d/*.conf</filename></para>
+     <para><filename>/etc/modprobe.d/*.conf</filename></para>
+diff --git a/tools/depmod.c b/tools/depmod.c
+index 1d1d41d..630fef9 100644
+--- a/tools/depmod.c
++++ b/tools/depmod.c
+@@ -54,6 +54,7 @@ static const char *const default_cfg_paths[] = {
+ 	SYSCONFDIR "/depmod.d",
+ 	"/run/depmod.d",
+ 	"/usr/local/lib/depmod.d",
++	DISTCONFDIR "/depmod.d",
+ 	"/lib/depmod.d",
+ 	NULL
+ };
+-- 
+2.41.0
+
+
+From ecef7c131618bbd9c559924ecae55764089db0dd Mon Sep 17 00:00:00 2001
+From: Michal Suchanek <msuchanek@suse.de>
+Date: Tue, 18 Jul 2023 14:01:55 +0200
+Subject: [PATCH 4/6] kmod: Add pkgconfig file with kmod compile time
+ configuration
+
+Show distconfdir (where system configuration files are searched/to be
+installed), sysconfdir (where user configuration files are searched),
+module compressions, and module signatures supported.
+
+Signed-off-by: Michal Suchanek <msuchanek@suse.de>
+Link: https://lore.kernel.org/r/468b3f572d3b84f25bb53ec8fcb15ed4871914d4.1689681454.git.msuchanek@suse.de
+Signed-off-by: Lucas De Marchi <lucas.de.marchi@gmail.com>
+---
+ Makefile.am      |  2 +-
+ configure.ac     | 11 +++++++++++
+ tools/kmod.pc.in |  9 +++++++++
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+ create mode 100644 tools/kmod.pc.in
+
+diff --git a/Makefile.am b/Makefile.am
+index e6630a3..2a54c25 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -96,7 +96,7 @@ libkmod_libkmod_internal_la_DEPENDENCIES  = $(libkmod_libkmod_la_DEPENDENCIES)
+ libkmod_libkmod_internal_la_LIBADD = $(libkmod_libkmod_la_LIBADD)
+ 
+ pkgconfigdir = $(libdir)/pkgconfig
+-pkgconfig_DATA = libkmod/libkmod.pc
++pkgconfig_DATA = libkmod/libkmod.pc tools/kmod.pc
+ 
+ bashcompletiondir=@bashcompletiondir@
+ dist_bashcompletion_DATA = \
+diff --git a/configure.ac b/configure.ac
+index fd88d1f..7bf8d78 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -21,6 +21,9 @@ LT_INIT([disable-static pic-only])
+ AS_IF([test "x$enable_static" = "xyes"], [AC_MSG_ERROR([--enable-static is not supported by kmod])])
+ AS_IF([test "x$enable_largefile" = "xno"], [AC_MSG_ERROR([--disable-largefile is not supported by kmod])])
+ 
++module_compressions=""
++module_signatures="legacy"
++
+ #####################################################################
+ # Program checks and configurations
+ #####################################################################
+@@ -94,6 +97,7 @@ AC_ARG_WITH([zstd],
+ AS_IF([test "x$with_zstd" != "xno"], [
+ 	PKG_CHECK_MODULES([libzstd], [libzstd >= 1.4.4], [LIBS="$LIBS $libzstd_LIBS"])
+ 	AC_DEFINE([ENABLE_ZSTD], [1], [Enable Zstandard for modules.])
++	module_compressions="zstd $module_compressions"
+ ], [
+ 	AC_MSG_NOTICE([Zstandard support not requested])
+ ])
+@@ -105,6 +109,7 @@ AC_ARG_WITH([xz],
+ AS_IF([test "x$with_xz" != "xno"], [
+ 	PKG_CHECK_MODULES([liblzma], [liblzma >= 4.99], [LIBS="$LIBS $liblzma_LIBS"])
+ 	AC_DEFINE([ENABLE_XZ], [1], [Enable Xz for modules.])
++	module_compressions="xz $module_compressions"
+ ], [
+ 	AC_MSG_NOTICE([Xz support not requested])
+ ])
+@@ -116,6 +121,7 @@ AC_ARG_WITH([zlib],
+ AS_IF([test "x$with_zlib" != "xno"], [
+ 	PKG_CHECK_MODULES([zlib], [zlib], [LIBS="$LIBS $zlib_LIBS"])
+ 	AC_DEFINE([ENABLE_ZLIB], [1], [Enable zlib for modules.])
++	module_compressions="gzip $module_compressions"
+ ], [
+ 	AC_MSG_NOTICE([zlib support not requested])
+ ])
+@@ -134,6 +140,7 @@ AS_IF([test "x$with_openssl" != "xno"], [
+ 		AC_MSG_NOTICE([openssl sm3 support not detected])
+ 		CPPFLAGS="$CPPFLAGS -DOPENSSL_NO_SM3"
+ 	])
++	module_signatures="PKCS7 $module_signatures"
+ ], [
+ 	AC_MSG_NOTICE([openssl support not requested])
+ ])
+@@ -298,6 +305,9 @@ AC_DEFINE_UNQUOTED(KMOD_FEATURES, ["$with_features"], [Features in this build])
+ # Generate files from *.in
+ #####################################################################
+ 
++AC_SUBST([module_compressions], $module_compressions)
++AC_SUBST([module_signatures], $module_signatures)
++
+ AC_CONFIG_FILES([
+ 	Makefile
+ 	man/Makefile
+@@ -305,6 +315,7 @@ AC_CONFIG_FILES([
+ 	libkmod/docs/version.xml
+ 	libkmod/libkmod.pc
+ 	libkmod/python/kmod/version.py
++	tools/kmod.pc
+ ])
+ 
+ 
+diff --git a/tools/kmod.pc.in b/tools/kmod.pc.in
+new file mode 100644
+index 0000000..2595980
+--- /dev/null
++++ b/tools/kmod.pc.in
+@@ -0,0 +1,9 @@
++prefix=@prefix@
++sysconfdir=@sysconfdir@
++distconfdir=@distconfdir@
++module_compressions=@module_compressions@
++module_signatures=@module_signatures@
++
++Name: kmod
++Description: Tools to deal with kernel modules
++Version: @VERSION@
+-- 
+2.41.0
+
+
+From 3af2f475b0b729f20279f2ce488cc9f727f0b763 Mon Sep 17 00:00:00 2001
+From: Sam James <sam@gentoo.org>
+Date: Sun, 5 Nov 2023 22:02:25 +0000
+Subject: [PATCH 5/6] tools: depmod: fix -Walloc-size
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+GCC 14 introduces a new -Walloc-size included in -Wextra which gives:
+```
+tools/depmod.c:192:14: warning: allocation of insufficient size ‘1’ for type ‘struct index_node’ with size ‘1048’ [-Walloc-size]
+tools/depmod.c:255:11: warning: allocation of insufficient size ‘1’ for type ‘struct index_value’ with size ‘16’ [-Walloc-size]
+tools/depmod.c:286:35: warning: allocation of insufficient size ‘1’ for type ‘struct index_node’ with size ‘1048’ [-Walloc-size]
+tools/depmod.c:315:44: warning: allocation of insufficient size ‘1’ for type ‘struct index_node’ with size ‘1048’ [-Walloc-size]
+```
+
+The calloc prototype is:
+```
+void *calloc(size_t nmemb, size_t size);
+```
+
+So, just swap the number of members and size arguments to match the prototype, as
+we're initialising 1 struct of size `sizeof(struct ...)`. GCC then sees we're not
+doing anything wrong.
+
+Signed-off-by: Sam James <sam@gentoo.org>
+---
+ tools/depmod.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/tools/depmod.c b/tools/depmod.c
+index 630fef9..ab8513b 100644
+--- a/tools/depmod.c
++++ b/tools/depmod.c
+@@ -190,7 +190,7 @@ static struct index_node *index_create(void)
+ {
+ 	struct index_node *node;
+ 
+-	node = NOFAIL(calloc(sizeof(struct index_node), 1));
++	node = NOFAIL(calloc(1, sizeof(struct index_node)));
+ 	node->prefix = NOFAIL(strdup(""));
+ 	node->first = INDEX_CHILDMAX;
+ 
+@@ -253,7 +253,7 @@ static int index_add_value(struct index_value **values,
+ 		values = &(*values)->next;
+ 
+ 	len = strlen(value);
+-	v = NOFAIL(calloc(sizeof(struct index_value) + len + 1, 1));
++	v = NOFAIL(calloc(1, sizeof(struct index_value) + len + 1));
+ 	v->next = *values;
+ 	v->priority = priority;
+ 	memcpy(v->value, value, len + 1);
+@@ -284,7 +284,7 @@ static int index_insert(struct index_node *node, const char *key,
+ 				struct index_node *n;
+ 
+ 				/* New child is copy of node with prefix[j+1..N] */
+-				n = NOFAIL(calloc(sizeof(struct index_node), 1));
++				n = NOFAIL(calloc(1, sizeof(struct index_node)));
+ 				memcpy(n, node, sizeof(struct index_node));
+ 				n->prefix = NOFAIL(strdup(&prefix[j+1]));
+ 
+@@ -313,7 +313,7 @@ static int index_insert(struct index_node *node, const char *key,
+ 				node->first = ch;
+ 			if (ch > node->last)
+ 				node->last = ch;
+-			node->children[ch] = NOFAIL(calloc(sizeof(struct index_node), 1));
++			node->children[ch] = NOFAIL(calloc(1, sizeof(struct index_node)));
+ 
+ 			child = node->children[ch];
+ 			child->prefix = NOFAIL(strdup(&key[i+1]));
+-- 
+2.41.0
+
+
+From 510c8b7f7455c6613dd1706e5e41ec7b09cf6703 Mon Sep 17 00:00:00 2001
+From: Dimitri John Ledkov <dimitri.ledkov@canonical.com>
+Date: Sun, 29 Oct 2023 03:03:19 +0200
+Subject: [PATCH 6/6] libkmod: remove pkcs7 obj_to_hash_algo()
+
+Switch to using OBJ_obj2txt() to calculate and print the pkcs7
+signature hash name. This eliminates the need to duplicate libcrypto
+NID to name mapping, detect SM3 openssl compile-time support, and
+enables using any hashes that openssl and kernel know about. For
+example SHA3 are being added for v6.7 and with this patch are
+automatically supported.
+
+Signed-off-by: Dimitri John Ledkov <dimitri.ledkov@canonical.com>
+Link: https://lore.kernel.org/r/20231029010319.157390-1-dimitri.ledkov@canonical.com
+---
+ configure.ac                |  7 -----
+ libkmod/libkmod-signature.c | 59 +++++++++++++------------------------
+ 2 files changed, 20 insertions(+), 46 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 7bf8d78..a6b8fa0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -133,13 +133,6 @@ AC_ARG_WITH([openssl],
+ AS_IF([test "x$with_openssl" != "xno"], [
+ 	PKG_CHECK_MODULES([libcrypto], [libcrypto >= 1.1.0], [LIBS="$LIBS $libcrypto_LIBS"])
+ 	AC_DEFINE([ENABLE_OPENSSL], [1], [Enable openssl for modinfo.])
+-	AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <openssl/ssl.h>
+-		int nid = NID_sm3;]])], [
+-		AC_MSG_NOTICE([openssl supports sm3])
+-	], [
+-		AC_MSG_NOTICE([openssl sm3 support not detected])
+-		CPPFLAGS="$CPPFLAGS -DOPENSSL_NO_SM3"
+-	])
+ 	module_signatures="PKCS7 $module_signatures"
+ ], [
+ 	AC_MSG_NOTICE([openssl support not requested])
+diff --git a/libkmod/libkmod-signature.c b/libkmod/libkmod-signature.c
+index b749a81..80f6447 100644
+--- a/libkmod/libkmod-signature.c
++++ b/libkmod/libkmod-signature.c
+@@ -127,6 +127,7 @@ struct pkcs7_private {
+ 	PKCS7 *pkcs7;
+ 	unsigned char *key_id;
+ 	BIGNUM *sno;
++	char *hash_algo;
+ };
+ 
+ static void pkcs7_free(void *s)
+@@ -137,42 +138,11 @@ static void pkcs7_free(void *s)
+ 	PKCS7_free(pvt->pkcs7);
+ 	BN_free(pvt->sno);
+ 	free(pvt->key_id);
++	free(pvt->hash_algo);
+ 	free(pvt);
+ 	si->private = NULL;
+ }
+ 
+-static int obj_to_hash_algo(const ASN1_OBJECT *o)
+-{
+-	int nid;
+-
+-	nid = OBJ_obj2nid(o);
+-	switch (nid) {
+-	case NID_md4:
+-		return PKEY_HASH_MD4;
+-	case NID_md5:
+-		return PKEY_HASH_MD5;
+-	case NID_sha1:
+-		return PKEY_HASH_SHA1;
+-	case NID_ripemd160:
+-		return PKEY_HASH_RIPE_MD_160;
+-	case NID_sha256:
+-		return PKEY_HASH_SHA256;
+-	case NID_sha384:
+-		return PKEY_HASH_SHA384;
+-	case NID_sha512:
+-		return PKEY_HASH_SHA512;
+-	case NID_sha224:
+-		return PKEY_HASH_SHA224;
+-# ifndef OPENSSL_NO_SM3
+-	case NID_sm3:
+-		return PKEY_HASH_SM3;
+-# endif
+-	default:
+-		return -1;
+-	}
+-	return -1;
+-}
+-
+ static const char *x509_name_to_str(X509_NAME *name)
+ {
+ 	int i;
+@@ -219,7 +189,8 @@ static bool fill_pkcs7(const char *mem, off_t size,
+ 	unsigned char *key_id_str;
+ 	struct pkcs7_private *pvt;
+ 	const char *issuer_str;
+-	int hash_algo;
++	char *hash_algo;
++	int hash_algo_len;
+ 
+ 	size -= sig_len;
+ 	pkcs7_raw = mem + size;
+@@ -278,27 +249,37 @@ static bool fill_pkcs7(const char *mem, off_t size,
+ 
+ 	X509_ALGOR_get0(&o, NULL, NULL, dig_alg);
+ 
+-	hash_algo = obj_to_hash_algo(o);
+-	if (hash_algo < 0)
++	// Use OBJ_obj2txt to calculate string length
++	hash_algo_len = OBJ_obj2txt(NULL, 0, o, 0);
++	if (hash_algo_len < 0)
+ 		goto err3;
+-	sig_info->hash_algo = pkey_hash_algo[hash_algo];
+-	// hash algo has not been recognized
+-	if (sig_info->hash_algo == NULL)
++	hash_algo = malloc(hash_algo_len + 1);
++	if (hash_algo == NULL)
+ 		goto err3;
++	hash_algo_len = OBJ_obj2txt(hash_algo, hash_algo_len + 1, o, 0);
++	if (hash_algo_len < 0)
++		goto err4;
++
++	// Assign libcrypto hash algo string or number
++	sig_info->hash_algo = hash_algo;
++
+ 	sig_info->id_type = pkey_id_type[modsig->id_type];
+ 
+ 	pvt = malloc(sizeof(*pvt));
+ 	if (pvt == NULL)
+-		goto err3;
++		goto err4;
+ 
+ 	pvt->pkcs7 = pkcs7;
+ 	pvt->key_id = key_id_str;
+ 	pvt->sno = sno_bn;
++	pvt->hash_algo = hash_algo;
+ 	sig_info->private = pvt;
+ 
+ 	sig_info->free = pkcs7_free;
+ 
+ 	return true;
++err4:
++	free(hash_algo);
+ err3:
+ 	free(key_id_str);
+ err2:
+-- 
+2.41.0
+
