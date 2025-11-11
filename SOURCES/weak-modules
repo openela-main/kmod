@@ -1083,7 +1083,7 @@ remove_kernel() {
     module_has_changed $weak_modules $remove_krel
 
     # Remove everything beneath the weak-updates directory
-    ( cd "$weak_modules" && doit rm -rf * )
+    ( [ -d "$weak_modules" ] && cd "$weak_modules" && doit rm -rf * )
 }
 
 ################################################################################

@@ -1,6 +1,6 @@
 Name:		kmod
 Version:	28
-Release:	10%{?dist}
+Release:	11%{?dist}
 Summary:	Linux kernel module management utilities
 
 License:	GPLv2+
@@ -119,6 +119,10 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Mon Aug 18 2025 Jan Stancek <jstancek@redhat.com> - 28-11
+- check weak-updates directory exists before using it
+- Resolves: RHEL-106279
+
 * Thu Aug 15 2024 Eugene Syromiatnikov <esyr@redhat.com> - 28-10
 - Fix issues discovered by static analysis
 - Resolves: RHEL-34073
