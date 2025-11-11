@@ -16,7 +16,7 @@
 
 Name:		kmod
 Version:	31
-Release:	11%{?dist}
+Release:	12%{?dist}
 Summary:	Linux kernel module management utilities
 
 # https://docs.fedoraproject.org/en-US/legal/license-field/#_no_effective_license_analysis
@@ -196,6 +196,10 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Tue Aug 19 2025 Jan Stancek <jstancek@redhat.com> - 31-12
+- check weak-updates directory exists before using it
+- Resolves: RHEL-109793
+
 * Tue Jan 14 2025 Eugene Syromiatnikov <esyr@redhat.com> - 31-11
 - Enable zstd compression support for initramfs in weak-modules
 - Resolves: RHEL-74288
