@@ -1,0 +1,59 @@
+From 327c587a0bfe0c62aed05efe834de7422e480d02 Mon Sep 17 00:00:00 2001
+Message-ID: <327c587a0bfe0c62aed05efe834de7422e480d02.1770113832.git.jstancek@redhat.com>
+From: Jan Stancek <jstancek@redhat.com>
+Date: Tue, 30 Sep 2025 10:37:21 +0200
+Subject: [PATCH] modprobe: don't attempt to remove an already removed module
+Content-type: text/plain
+
+In a scenario like following:
+    # lsmod | grep -e bnx2i -e cnic
+    bnx2i                  94208  0
+    libiscsi               94208  1 bnx2i
+    cnic                   90112  1 bnx2i
+    uio                    32768  1 cnic
+    scsi_transport_iscsi   196608  2 bnx2i,libiscsi
+
+    # modprobe -v --remove --remove-holders cnic
+    rmmod bnx2i
+    rmmod cnic
+    rmmod libiscsi
+    rmmod cnic
+    modprobe: ERROR: libkmod/libkmod-module.c:856 kmod_module_remove_module()
+    could not remove 'cnic': No such file or directory
+
+modprobe attempts to remove cnic module twice and propagates that error
+to the user with a message as well as an exit code.
+
+Add a check to avoid attempts to remove modules that are already gone.
+
+Signed-off-by: Jan Stancek <jstancek@redhat.com>
+Reviewed-by: Emil Velikov <emil.l.velikov@gmail.com>
+Link: https://github.com/kmod-project/kmod/pull/pull/393
+Signed-off-by: Lucas De Marchi <demarchi@kernel.org>
+---
+ tools/modprobe.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/tools/modprobe.c b/tools/modprobe.c
+index 757723e8519c..349e7e0ef6b2 100644
+--- a/tools/modprobe.c
++++ b/tools/modprobe.c
+@@ -507,9 +507,12 @@ static int rmmod_do_module(struct kmod_module *mod, int flags)
+ 		}
+ 	}
+ 
+-	if (!cmd)
+-		err = rmmod_do_remove_module(mod);
+-	else
++	if (!cmd) {
++		if (kmod_module_get_refcnt(mod) != -ENOENT)
++			err = rmmod_do_remove_module(mod);
++		else
++			err = 0;
++	} else
+ 		err = command_do(mod, "remove", cmd, NULL);
+ 
+ 	if (err < 0)
+-- 
+2.47.3
+

@@ -16,7 +16,7 @@
 
 Name:		kmod
 Version:	31
-Release:	12%{?dist}
+Release:	13%{?dist}
 Summary:	Linux kernel module management utilities
 
 # https://docs.fedoraproject.org/en-US/legal/license-field/#_no_effective_license_analysis
@@ -70,6 +70,7 @@ Source2:	depmod.conf.dist
 Patch1:		kmod-tip.patch
 # v33~1 "libkmod: avoid undefined behaviour in libkmod-builtin.c:get_string"
 Patch2:		0001-libkmod-avoid-undefined-behaviour-in-libkmod-builtin.patch
+Patch3:		0001-modprobe-don-t-attempt-to-remove-an-already-removed-.patch
 
 Exclusiveos:	Linux
 
@@ -196,6 +197,10 @@ install -m 0644 %{SOURCE2} $RPM_BUILD_ROOT%{_sysconfdir}/depmod.d/dist.conf
 %{_libdir}/libkmod.so
 
 %changelog
+* Tue Feb 03 2026 Jan Stancek <jstancek@redhat.com> - 31-13
+- modprobe: don't attempt to remove an already removed module
+- Resolves: RHEL-113203
+
 * Tue Aug 19 2025 Jan Stancek <jstancek@redhat.com> - 31-12
 - check weak-updates directory exists before using it
 - Resolves: RHEL-109793
